@@ -1,0 +1,89 @@
+#!/usr/bin/env python
+
+import rospy
+import actionlib
+import tf2_ros
+
+import move_base_msgs.msg
+import geometry_msgs.msg
+
+rospy.init_node("tasker")
+
+client = actionlib.SimpleActionClient("move_base", move_base_msgs.msg.MoveBaseAction)
+
+def get_transform():
+	tfBuffer = tf2_ros.Buffer()
+	listener = tf2_ros.TransformListener(tfBuffer)
+	while True:
+		try:
+			transform = tfBuffer.lookup_transform("map", "odom", rospy.Time(), rospy.Duration(20))
+			return transform
+		except:
+			pass
+
+def navigation():
+	global client
+	#Find x1,y1 and x2,y2
+	x1,y1 = 3,4
+	x2,y2 = 5,2
+	d = 15.24
+	m = (x1-x2)/(y2-y1)
+
+	#Initial Goal Following
+	goal_initial = move_base_msgs.msg.MoveBaseActionGoal()
+	goal_initial.header.stamp = rospy.Time.now()
+	goal_initial.header.frame_id = "map"
+	goal_initial.goal_id.stamp = rospy.Time.now()
+	goal_initial.goal_id.id = "nav1"
+	goal_initial.goal.target_pose.header.stamp = rospy.Time.now()
+	goal_initial.goal.target_pose.header.frame_id = "map"
+	goal_initial.goal.target_pose.pose.position.x = (x1+x2)/2.0
+	goal_initial.goal.target_pose.pose.position.y = (y1+y2)/2.0
+	goal_initial.goal.target_pose.pose.orientation = transform.transform.rotation
+
+	m_positive = (goal_initial.goal.target_pose.pose.position.y-transform.transform.translation.y)/(goal_initial.goal.target_pose.pose.position.x-transform.transform.translation.x)>0
+	if(m_positive and d<0) or (not m_positive and d>0):
+		d *= -1
+	#rospy.loginfo(goal_initial.goal.target_pose.pose.position)
+	#rospy.loginfo(m_positive)
+	#rospy.loginfo(d)
+	
+	goal_mid = move_base_msgs.msg.MoveBaseActionGoal()
+	goal_mid.header.stamp = rospy.Time.now()
+	goal_mid.header.frame_id = "map"
+	goal_mid.goal_id.stamp = rospy.Time.now()
+	goal_mid.goal_id.id = "nav2"
+	goal_mid.goal.target_pose.header.stamp = rospy.Time.now()
+	goal_mid.goal.target_pose.header.frame_id = "map"
+	goal_mid.goal.target_pose.pose.position.x += goal_initial.goal.target_pose.pose.position.x + d/((1+m**2)**0.5)
+	goal_mid.goal.target_pose.pose.position.y += goal_initial.goal.target_pose.pose.position.y + m*d/((1+m**2)**0.5)
+
+	client.send_goal_and_wait(goal_initial, rospy.Duration(30), rospy.Duration(30))
+	client.send_goal(goal_mid)
+
+	#Navigation Final Gate Check Loop
+
+
+	rospy.loginfo(goal_initial.goal.target_pose.pose)
+	rospy.loginfo(goal_mid.goal.target_pose.pose)
+	
+
+
+
+"""
+goal = move_base_msgs.msg.MoveBaseActionGoal()
+goal.header.stamp = rospy.Time.now()
+goal.header.frame_id = "map"
+
+goal.goal_id.stamp = rospy.Time.now()
+goal.goal_id.id = "hey"
+goal.goal.target_pose.header.stamp = rospy.Time.now()
+goal.goal.target_pose.header.frame_id = "map"
+goal.goal.target_pose.pose.position.x = 1
+goal.goal.target_pose.pose.orientation.w = 1
+
+client.send_goal(goal)
+
+rospy.spin()"""
+
+navigation()
